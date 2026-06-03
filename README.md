@@ -48,7 +48,7 @@
 ## 安装
 
 ```bash
-git clone https://github.com/your-username/anki-helper.git
+git clone https://github.com/shao-qi-king/anki-helper.git
 cd anki-helper
 python -m pip install -r requirements.txt
 ```
