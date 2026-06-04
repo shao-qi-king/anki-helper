@@ -6,6 +6,8 @@ from config import (
     CARD_FRONT_TEMPLATE, CARD_BACK_TEMPLATE, CARD_CSS,
     SENTENCE_MODEL_NAME, SENTENCE_DECK_NAME,
     SENTENCE_FRONT_TEMPLATE, SENTENCE_BACK_TEMPLATE, SENTENCE_CSS,
+    LISTENING_MODEL_NAME, LISTENING_DECK_NAME,
+    LISTENING_FRONT_TEMPLATE, LISTENING_BACK_TEMPLATE, LISTENING_CSS,
 )
 
 
@@ -214,6 +216,74 @@ def add_sentence(chinese, english, grammar="", note="", deck_name=None):
                 "Chinese": chinese,
                 "English": english,
                 "Grammar": grammar,
+                "Note": note,
+                "Audio": audio,
+            },
+            "options": {
+                "allowDuplicate": False,
+                "duplicateScope": "deck",
+                "duplicateScopeOptions": {
+                    "deckName": deck,
+                    "checkChildren": False,
+                },
+            },
+        },
+    )
+    return True, note_id
+
+
+def ensure_listening_model():
+    models = _invoke("modelNames")
+    if LISTENING_MODEL_NAME in models:
+        _invoke("updateModelTemplates", model={
+            "name": LISTENING_MODEL_NAME,
+            "templates": {
+                "Card 1": {
+                    "Front": LISTENING_FRONT_TEMPLATE,
+                    "Back": LISTENING_BACK_TEMPLATE,
+                }
+            }
+        })
+        return
+
+    _invoke(
+        "createModel",
+        modelName=LISTENING_MODEL_NAME,
+        inOrderFields=["Word", "Phonetic", "Definition", "Example", "Note", "Audio"],
+        css=LISTENING_CSS,
+        cardTemplates=[
+            {
+                "Name": "Card 1",
+                "Front": LISTENING_FRONT_TEMPLATE,
+                "Back": LISTENING_BACK_TEMPLATE,
+            }
+        ],
+    )
+
+
+def add_listening_note(word, phonetic, definition, example, note="", deck_name=None):
+    deck = deck_name or LISTENING_DECK_NAME
+    ensure_deck(deck)
+    ensure_listening_model()
+
+    result = _invoke("findNotes", query=f'"deck:{deck}" "Word:{word}"')
+    if result and len(result) > 0:
+        return False, "该单词已存在于听力牌组中"
+
+    audio = download_audio(word)
+    if not audio:
+        return False, "无法下载发音音频，听力模式需要音频"
+
+    note_id = _invoke(
+        "addNote",
+        note={
+            "deckName": deck,
+            "modelName": LISTENING_MODEL_NAME,
+            "fields": {
+                "Word": word,
+                "Phonetic": phonetic,
+                "Definition": definition,
+                "Example": example,
                 "Note": note,
                 "Audio": audio,
             },

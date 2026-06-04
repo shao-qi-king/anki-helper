@@ -1,8 +1,8 @@
 import json
 from flask import Flask, request, jsonify, send_from_directory
 from youdao import lookup
-from anki_connect import add_note, add_sentence, _invoke, check_duplicate, get_deck_names
-from config import DECK_NAME, SENTENCE_DECK_NAME
+from anki_connect import add_note, add_sentence, add_listening_note, _invoke, check_duplicate, get_deck_names
+from config import DECK_NAME, SENTENCE_DECK_NAME, LISTENING_DECK_NAME
 
 app = Flask(__name__, static_folder="static")
 app.config["JSON_AS_ASCII"] = False
@@ -144,6 +144,29 @@ def api_sentence_translate():
         pass
 
     return jsonify(result)
+
+
+@app.route("/api/listening/add", methods=["POST"])
+def api_listening_add():
+    data = request.json
+    word = data.get("word", "").strip()
+    phonetic = data.get("phonetic", "")
+    definition = data.get("definition", "")
+    example = data.get("example", "")
+    note = data.get("note", "")
+    deck = data.get("deck", "")
+
+    if not word or not definition:
+        return jsonify({"error": "单词和释义不能为空"}), 400
+
+    try:
+        success, result = add_listening_note(word, phonetic, definition, example, note, deck_name=deck or None)
+        if success:
+            return jsonify({"success": True, "message": "添加成功"})
+        else:
+            return jsonify({"success": False, "message": result})
+    except (ConnectionError, RuntimeError) as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

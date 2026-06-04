@@ -238,6 +238,7 @@
         <h1>Anki 单词助手</h1>
         <div class="tabs">
             <div class="tab active" data-panel="add">添加单词</div>
+            <div class="tab" data-panel="listening">听力模式</div>
             <div class="tab" data-panel="sentence">口语句型</div>
             <div class="tab" data-panel="list">单词列表</div>
         </div>
@@ -271,6 +272,40 @@
                     <input type="text" class="note-input" id="note-input"
                            placeholder="备注（可选）">
                     <button class="btn btn-success" id="btn-add">添加到 Anki</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 听力模式面板 -->
+        <div class="panel" id="panel-listening">
+            <div class="search-box">
+                <input type="text" id="listening-word-input" placeholder="输入单词，按 Enter 查询..."
+                       autocomplete="off">
+                <button class="btn btn-primary" id="btn-listening-search">查词</button>
+            </div>
+            <div class="search-hint">添加后 Anki 正面只播放发音，翻面显示单词详情</div>
+            <div class="result-card" id="listening-result-card">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div class="result-word" id="listening-result-word"></div>
+                    <button class="btn-speak" onclick="speak(listeningResult && listeningResult.word)" title="发音">&#x1f50a;</button>
+                </div>
+                <div class="result-phonetic" id="listening-result-phonetic"></div>
+                <div class="result-definition" id="listening-result-definition"></div>
+                <div class="result-example" id="listening-result-example"></div>
+                <div class="result-actions">
+                    <div class="deck-selector">
+                        <label>牌组:</label>
+                        <select id="listening-deck-select">
+                            <option value="">加载中...</option>
+                        </select>
+                        <input type="text" class="deck-new-input" id="listening-deck-new"
+                               placeholder="输入新牌组名">
+                    </div>
+                </div>
+                <div class="result-actions">
+                    <input type="text" class="note-input" id="listening-note-input"
+                           placeholder="备注（可选）">
+                    <button class="btn btn-success" id="btn-listening-add">添加到 Anki</button>
                 </div>
             </div>
         </div>
@@ -390,6 +425,21 @@ async function loadDecks() {
         sentNewOpt.value = '__new__';
         sentNewOpt.textContent = '+ 新建牌组...';
         sentSelect.appendChild(sentNewOpt);
+
+        // 填充听力模式面板的牌组选择器
+        const listenSelect = $('listening-deck-select');
+        listenSelect.innerHTML = '';
+        decks.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            if (d === 'English Listening') opt.selected = true;
+            listenSelect.appendChild(opt);
+        });
+        const listenNewOpt = document.createElement('option');
+        listenNewOpt.value = '__new__';
+        listenNewOpt.textContent = '+ 新建牌组...';
+        listenSelect.appendChild(listenNewOpt);
 
         decksLoaded = true;
     } catch (e) {
@@ -678,6 +728,100 @@ $('btn-sentence-add').addEventListener('click', async () => {
         toast('添加失败: ' + e.message, 'error');
     }
     $('btn-sentence-add').disabled = false;
+});
+
+// === 听力模式 ===
+let listeningResult = null;
+
+$('listening-deck-select').addEventListener('change', () => {
+    if ($('listening-deck-select').value === '__new__') {
+        $('listening-deck-new').classList.add('visible');
+        $('listening-deck-new').focus();
+    } else {
+        $('listening-deck-new').classList.remove('visible');
+    }
+});
+
+function getListeningDeck() {
+    const val = $('listening-deck-select').value;
+    if (val === '__new__') return $('listening-deck-new').value.trim();
+    return val;
+}
+
+async function searchListeningWord() {
+    const word = $('listening-word-input').value.trim();
+    if (!word) return;
+    $('btn-listening-search').disabled = true;
+    $('btn-listening-search').textContent = '查询中...';
+    try {
+        const resp = await fetch('/api/search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({word})
+        });
+        const data = await resp.json();
+        if (data.found) {
+            listeningResult = data;
+            $('listening-result-word').textContent = data.word;
+            $('listening-result-phonetic').textContent = data.phonetic || '';
+            $('listening-result-definition').textContent = data.definition;
+            $('listening-result-example').textContent = data.example || '';
+            $('listening-result-card').classList.add('visible');
+            loadDecks();
+            speak(data.word);
+        } else {
+            toast('未找到该单词', 'warning');
+            $('listening-result-card').classList.remove('visible');
+        }
+    } catch (e) {
+        toast('查询失败: ' + e.message, 'error');
+    }
+    $('btn-listening-search').disabled = false;
+    $('btn-listening-search').textContent = '查词';
+}
+
+$('btn-listening-search').addEventListener('click', searchListeningWord);
+$('listening-word-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') searchListeningWord();
+});
+
+$('btn-listening-add').addEventListener('click', async () => {
+    if (!listeningResult) return;
+    const deck = getListeningDeck();
+    if (!deck) {
+        toast('请选择或输入牌组名', 'warning');
+        return;
+    }
+    $('btn-listening-add').disabled = true;
+    try {
+        const resp = await fetch('/api/listening/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                ...listeningResult,
+                note: $('listening-note-input').value.trim(),
+                deck: deck
+            })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            toast(`已添加到「${deck}」`);
+            $('listening-word-input').value = '';
+            $('listening-note-input').value = '';
+            $('listening-result-card').classList.remove('visible');
+            listeningResult = null;
+            $('listening-word-input').focus();
+            if ($('listening-deck-select').value === '__new__') {
+                decksLoaded = false;
+                loadDecks();
+            }
+        } else {
+            toast(data.message || data.error, 'warning');
+        }
+    } catch (e) {
+        toast('添加失败: ' + e.message, 'error');
+    }
+    $('btn-listening-add').disabled = false;
 });
 
 loadDecks();
