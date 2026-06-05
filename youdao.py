@@ -59,14 +59,11 @@ def lookup(word):
     if is_chinese:
         # 中文查英文：解析 ce 部分
         ce = data.get("ce", {})
+        first_en_word = ""
         if ce:
             word_info = ce.get("word", {})
             if isinstance(word_info, list) and word_info:
                 word_info = word_info[0]
-
-            phone = word_info.get("phone", "")
-            if phone:
-                result["phonetic"] = phone
 
             trs = word_info.get("trs", [])
             definitions = []
@@ -87,6 +84,8 @@ def lookup(word):
                         tran = l_data.get("#tran", "")
                         pos = l_data.get("pos", "")
                         if en_word:
+                            if not first_en_word:
+                                first_en_word = en_word
                             line = f"{pos} {en_word}".strip()
                             if tran:
                                 line += f"  ({tran.split('；')[0]})"
@@ -94,6 +93,22 @@ def lookup(word):
             if definitions:
                 result["definition"] = "\n".join(definitions)
                 result["found"] = True
+
+        # 用第一个英文单词二次查询获取音标
+        if first_en_word:
+            en_data = _query_youdao_dict(first_en_word)
+            if en_data:
+                ec = en_data.get("ec", {})
+                if ec:
+                    en_word_info = ec.get("word", {})
+                    if isinstance(en_word_info, list) and en_word_info:
+                        en_word_info = en_word_info[0]
+                    usphone = en_word_info.get("usphone", "")
+                    ukphone = en_word_info.get("ukphone", "")
+                    if usphone:
+                        result["phonetic"] = f"/{usphone}/"
+                    elif ukphone:
+                        result["phonetic"] = f"/{ukphone}/"
 
         # ce 没结果，用 fanyi
         if not result["found"]:
